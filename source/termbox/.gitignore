@@ -1,0 +1,14 @@
+.dub
+docs.json
+__dummy.html
+*.o
+*.obj
+
+dub.selections.json
+libtermbox.a
+
+examples/helloWorld/helloworld
+examples/helloWorld/dub.selections.json
+
+examples/mouseInput/mouseinput
+examples/mouseInput/dub.selections.json

@@ -1,0 +1,10 @@
+name "mouseinput"
+description "A minimal D application."
+copyright "Copyright © 2016, zachary"
+authors "zachary"
+
+sourcePaths "."
+
+targetType "executable"
+
+dependency "termbox" version="*" path="../../"

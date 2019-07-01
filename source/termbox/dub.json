@@ -1,0 +1,29 @@
+{
+	"authors": [
+		"Zachary Yedidia"
+	],
+	"configurations": [
+		{
+			"name": "library",
+			"targetType": "sourceLibrary"
+		}
+	],
+	"importPaths": [
+		"source/"
+	],
+	"name": "termbox",
+	"preGenerateCommands": [
+		"sh $PACKAGE_DIR/build-termbox.sh"
+	],
+	"targetType": "sourceLibrary",
+	"license": "MIT",
+	"version": "0.0.5",
+	"description": "A port of the TUI library TermBox",
+	"homepage": "https://github.com/zyedidia/termbox-d",
+	"sourceFiles": [
+		"libtermbox.a"
+	],
+	"sourcePaths": [
+		"source/"
+	]
+}
