@@ -12,5 +12,5 @@ if [ ! -f libtermbox.a ] || [ "$1" == "-f" ]; then
     ./waf install --targets=termbox_static --destdir=.
     mv build/src/libtermbox.a ..
     cd ..
-    rm -rf termbox-master
+#    rm -rf termbox-master
 fi
