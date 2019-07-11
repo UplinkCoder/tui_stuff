@@ -7,6 +7,13 @@ import std.range;
 import std.datetime;
 import core.thread;
 
+static immutable figure =
+[ "    *    ",
+  "   * *   ",
+  "  *   *  ",
+  " *     * ",
+  "*********" ];  
+
 // import derelict.imgui.imgui;
 
 import std.file : dirEntries;
@@ -72,7 +79,7 @@ TUIContext initUI()
     assert(!isAlreadyInitialzed); 
 
     termbox.tb_init();
-    termbox.tb_select_input_mode(InputMode.mouse | InputMode.esc);
+    termbox.tb_select_input_mode(InputMode.mouse | InputMode.alt);
 
     auto width = termbox.tb_width();
     auto height = termbox.tb_height();
@@ -108,8 +115,11 @@ void term_ui(string[] args)
 
     bool paused = false;
     bool command_mode = false;
+    bool crosshair_shown = true;
 
     Event e;
+    Event lastEvent;
+
     v2i crosshair;
     Button b;
 
@@ -124,6 +134,39 @@ void term_ui(string[] args)
     string command;
 
     bool exit = false;
+
+    static immutable string[] command_list =
+    [
+        "q",
+        "p",
+        "center",
+        "crosshair"
+    ];
+
+    static string tab_complete(string buffer, const string[] word_list)
+    {
+        string result = null;
+
+        if (!buffer.length)
+            result = word_list[0];
+        // TODO PERFORMANCE: change to prefix tree or trie search
+        // instead of doing foreach
+        foreach(i, word;word_list)
+        {
+            if (buffer == word)
+            {
+                result = word_list[(i + 1) % word_list.length];
+                break;
+            }
+            else if (word.startsWith(buffer))
+            {
+                result = word;
+                break;
+            }
+        }
+
+        return result;
+    }
 
     void handle_command()
     {
@@ -146,6 +189,13 @@ void term_ui(string[] args)
                     case "p" :
                         paused = true;
                     break;
+                    case "center" :
+                        crosshair.x = ctx.screen_dim.x / 2;
+                        crosshair.y = ctx.screen_dim.y / 2;
+                    break;
+                    case "crosshair" :
+                        crosshair_shown = !crosshair_shown;
+                    break;
                     case "q" :
                         exit = true;
                     break;
@@ -154,6 +204,8 @@ void term_ui(string[] args)
             }
         }
     }
+
+    static immutable defaultEvent = Event(1);
 
 
     do with(termbox)
@@ -169,22 +221,38 @@ void term_ui(string[] args)
 
         tb_peek_event(&e, 10);
 
+
+        /// don't show the default event
+
+        if (e != defaultEvent && e != lastEvent)
+        {
+            lastEvent = e;
+        }
+
         // update_status();
 
         if (paused)
         {
-            printf("%c", e.ch);
-            if (e.ch == 'p')
+            if (e.type != 3 && e.ch == 'p')
             {
                 paused = false;
             }
             goto Lsleep;
         }
 
-        if (!command_mode && e.ch == ':')
+        if (!command_mode && e.type != 3 && e.ch == ':')
         {
             command_mode = true;
             command_buffer.length = 0;
+        }
+
+        if (command_mode && e.type != 3 && e.key == termbox.keyboard.Key.tab)
+        {
+            auto complete_result = tab_complete(command_buffer[1 .. $], command_list);
+            if (complete_result)
+            {
+                command_buffer =  ":" ~ complete_result;
+            }
         }
         
         tb_select_output_mode(OutputMode.normal);
@@ -216,15 +284,11 @@ void term_ui(string[] args)
             if (e.ch != 0)
                 word_buffer = "  " ~ "Nyautica matrix dataset analyser" ~ "  ";
             
-            if (e.ch)
+            if (e.type != 3 && e.ch)
                 (command_mode ? command_buffer : input_buffer) ~= e.ch;
 
-            exit = exit ? exit :
-                (e.key == keyboard.Key.esc || e.key == keyboard.Key.ctrlC || (!command_mode && e.ch == 'q'));
-
-            if (e.key == keyboard.Key.enter)
+            if (e.type != 3 && e.key == keyboard.Key.enter)
             {
-                message_buffer = "pressed enter";
                 if (command_mode)
                 {
                     handle_command();
@@ -234,14 +298,14 @@ void term_ui(string[] args)
                     input_buffer.length = 0;
                 }
             }
-            else if (e.key == keyboard.Key.space)
+            else if (e.type != 3 && e.key == keyboard.Key.space)
             {
                 (command_mode ? command_buffer : input_buffer) ~= " ";
             }
-            else if (e.key == 127)
+            else if (e.type != 3 && e.key == 127)
             {
                 auto buffer = &(command_mode ? command_buffer : input_buffer);
-                if (buffer.length) buffer.length--;
+                if (command_mode ? buffer.length > 1 : buffer.length) buffer.length--;
             }
         }
 
@@ -249,14 +313,12 @@ void term_ui(string[] args)
         {
             if (y == 2)
             {
-
                 xlength = cast(int) input_buffer.length;
                 xpos = cast(int)((width / 2) - (xlength / 2));
-                   
             }
             if (y == 3)
             {
-                word_buffer = "  " ~ to!string(e) ~ "  ";
+                word_buffer = "  " ~ to!string(lastEvent) ~ "  ";
                 //word_buffer = "The password is shellfish";
                 xlength = cast(int) word_buffer.length;
                 xpos = cast(int)((width / 2) - (word_buffer.length / 2));
@@ -291,7 +353,7 @@ void term_ui(string[] args)
                     const buffer = (y == 2 ? input_buffer : word_buffer);  
                     ch = buffer[x - xpos];
                 }
-                else if (x == crosshair.x || y == crosshair.y)
+                else if (crosshair_shown && (x == crosshair.x || y == crosshair.y))
                 {
                     ch = '+';
                 }
@@ -311,5 +373,6 @@ void term_ui(string[] args)
     } while (!exit);
 
     termbox.tb_shutdown();
+    writeln("last Event: ", e);
     writeln("termdim = {", width, ", ", height, "}");
 }
