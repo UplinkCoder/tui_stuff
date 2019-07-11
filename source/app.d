@@ -68,9 +68,12 @@ TUIContext initUI()
     bool isAlreadyInitialzed =
         termbox.tb_width() >= 0;
 
+
     assert(!isAlreadyInitialzed); 
 
     termbox.tb_init();
+    termbox.tb_select_input_mode(InputMode.mouse | InputMode.esc);
+
     auto width = termbox.tb_width();
     auto height = termbox.tb_height();
 
@@ -113,6 +116,7 @@ void term_ui(string[] args)
     int ycnt;
     int xcnt;
 
+    string message_buffer;
     string word_buffer;
     string input_buffer;
     string command_buffer;
@@ -124,7 +128,7 @@ void term_ui(string[] args)
     void handle_command()
     {
         command_mode = false;
-        command_buffer = command;
+        command = command_buffer;
         command_buffer.length = 0;
 
         if (command)
@@ -133,10 +137,11 @@ void term_ui(string[] args)
             if (command.length >= 2)
             {
                 command = command[1 .. $];
+                message_buffer = "Command: '" ~ command ~ "'";
                 switch(command)
                 {
                     default:
-                        command_buffer = "> Unknown command";
+                        command_buffer = "> Unknown command ...";
                     break;
                     case "p" :
                         paused = true;
@@ -176,8 +181,11 @@ void term_ui(string[] args)
             goto Lsleep;
         }
 
-        if (e.ch == ':')
+        if (!command_mode && e.ch == ':')
+        {
             command_mode = true;
+            command_buffer.length = 0;
+        }
         
         tb_select_output_mode(OutputMode.normal);
         //tb_set_cursor(0, 0);
@@ -204,40 +212,46 @@ void term_ui(string[] args)
             crosshair.x -= 1;
         }
 
+        {
+            if (e.ch != 0)
+                word_buffer = "  " ~ "Nyautica matrix dataset analyser" ~ "  ";
+            
+            if (e.ch)
+                (command_mode ? command_buffer : input_buffer) ~= e.ch;
+
+            exit = exit ? exit :
+                (e.key == keyboard.Key.esc || e.key == keyboard.Key.ctrlC || (!command_mode && e.ch == 'q'));
+
+            if (e.key == keyboard.Key.enter)
+            {
+                message_buffer = "pressed enter";
+                if (command_mode)
+                {
+                    handle_command();
+                }
+                else
+                {
+                    input_buffer.length = 0;
+                }
+            }
+            else if (e.key == keyboard.Key.space)
+            {
+                (command_mode ? command_buffer : input_buffer) ~= " ";
+            }
+            else if (e.key == 127)
+            {
+                auto buffer = &(command_mode ? command_buffer : input_buffer);
+                if (buffer.length) buffer.length--;
+            }
+        }
+
         foreach(int y;0 .. height)
         {
             if (y == 2)
             {
-                if (e.ch != 0)
-                    word_buffer = "  " ~ "Nyautica matrix dataset analyser" ~ "  ";
 
-                if (e.ch)
-                    (command_mode ? command_buffer : input_buffer) ~= e.ch;
-
-                if (e.key == keyboard.Key.enter)
-                {
-                    if (command_mode)
-                    {
-                        handle_command();
-                    }
-                    else
-                    {
-                        input_buffer.length = 0;
-                    }
-                }
-                else if (e.key == keyboard.Key.space)
-                {
-                    (command_mode ? command_buffer : input_buffer) ~= " ";
-                }
-                else if (e.key == 127)
-                {
-                    auto buffer = &(command_mode ? command_buffer : input_buffer);
-                    if (buffer.length) buffer.length--;
-                }
                 xlength = cast(int) input_buffer.length;
                 xpos = cast(int)((width / 2) - (xlength / 2));
-                exit = exit ? exit :
-                    (e.key == keyboard.Key.esc || e.key == keyboard.Key.ctrlC || (!command_mode && e.ch == 'q'));
                    
             }
             if (y == 3)
@@ -250,6 +264,12 @@ void term_ui(string[] args)
             else if (y == 4)
             {
                 word_buffer = "Status {command_mode: " ~ command_mode.to!string ~ ", paused: " ~ paused.to!string ~ "}";
+                xlength = cast(int) word_buffer.length;
+                xpos = cast(int)((width / 2) - (word_buffer.length / 2));
+            }
+            else if (y == 5)
+            {
+                word_buffer = message_buffer;
                 xlength = cast(int) word_buffer.length;
                 xpos = cast(int)((width / 2) - (word_buffer.length / 2));
             }
@@ -266,7 +286,7 @@ void term_ui(string[] args)
             {
                 wchar ch = ' ';
 
-                if ((x >= xpos && x < xpos + xlength) && (y == 2 || y == 3 || y == 4 || (y == height-1 && command_buffer.length > 0)))
+                if ((x >= xpos && x < xpos + xlength) && (y == 2 || y == 3 || y == 4 || y == 5 || (y == height-1 && command_buffer.length > 0)))
                 {
                     const buffer = (y == 2 ? input_buffer : word_buffer);  
                     ch = buffer[x - xpos];
