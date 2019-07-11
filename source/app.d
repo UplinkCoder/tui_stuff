@@ -135,6 +135,19 @@ void term_ui(string[] args)
 
     bool exit = false;
 
+    static string hisory(string buffer, string[] history_list)
+    {
+        string result = null;
+
+        if (!hisory_list.length)
+        {
+            result = buffer;
+        }
+
+        return result;
+    }
+
+
     static immutable string[] command_list =
     [
         "q",
@@ -240,13 +253,22 @@ void term_ui(string[] args)
             goto Lsleep;
         }
 
+        if (command_mode && e.type != 3 && e.key == Key.arrowUp)
+        {
+            auto history_result = history(command_buffer[1 .. $], history_list);
+            if (history_result)
+            {
+                command_buffer = ":" ~ history_result;
+            }
+        }
+
         if (!command_mode && e.type != 3 && e.ch == ':')
         {
             command_mode = true;
             command_buffer.length = 0;
         }
 
-        if (command_mode && e.type != 3 && e.key == termbox.keyboard.Key.tab)
+        if (command_mode && e.type != 3 && e.key == Key.tab)
         {
             auto complete_result = tab_complete(command_buffer[1 .. $], command_list);
             if (complete_result)
