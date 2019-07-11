@@ -7,6 +7,92 @@ import std.range;
 import std.datetime;
 import core.thread;
 
+struct TrieNode
+{
+    string data;
+    TrieNode*[26 + 10] children;
+    bool leaf;
+}
+
+struct Trie
+{
+    TrieNode root;
+
+    string[] matchingPrefix(TrieNode *prefix_node)
+    {
+        string[] result; 
+
+        if (prefix_node)
+        {
+            auto node = *prefix_node;
+            if (node.data)
+            {
+                result ~= node.data;
+                goto Lloop;
+            }
+            else 
+                Lloop: foreach(child;node.children)
+            {
+                result ~= matchingPrefix(child);
+            }
+        }
+
+        return result;
+    }
+
+    TrieNode* findPrefix(string prefix)
+    {
+        import std.ascii : toLower;
+        alias lowerASCII = std.ascii.toLower;
+
+        TrieNode* test = &root;
+
+        foreach(c;prefix)
+        {
+            if (test)
+                test = test.children[lowerASCII(c) - 'a'];
+            else
+                break;
+        }
+
+        return test;
+    }
+
+    void addWord(string word)
+    {
+        TrieNode* n = &root;
+        import std.ascii : toLower;
+        alias lowerASCII = std.ascii.toLower;
+        char c;
+
+        foreach(char _c;word)
+        {
+            c = cast(char)(lowerASCII(_c) - 'a');
+            if (n.children[c])
+            {
+                n = n.children[c];
+            }
+            else
+            {
+                auto new_node = new TrieNode();
+                n.children[c] = new_node;
+                n = new_node;
+            }
+        }
+        n.data = word;
+    }
+
+    void remove(TrieNode* node)
+    {
+
+    }
+
+    string printTrie()
+    {
+        return matchingPrefix(&root).join("  "); 
+    }
+}
+
 static immutable figure =
 [ "    *    ",
   "   * *   ",
@@ -132,14 +218,14 @@ void term_ui(string[] args)
     string command_buffer;
 
     string command;
-
+    Trie trie;
     bool exit = false;
 
-    static string hisory(string buffer, string[] history_list)
+    static string history(string buffer, string[] history_list)
     {
         string result = null;
 
-        if (!hisory_list.length)
+        if (!history_list.length)
         {
             result = buffer;
         }
@@ -150,6 +236,9 @@ void term_ui(string[] args)
 
     static immutable string[] command_list =
     [
+        "add",
+        "findPrefix",
+        "print",
         "q",
         "p",
         "center",
@@ -193,6 +282,10 @@ void term_ui(string[] args)
             if (command.length >= 2)
             {
                 command = command[1 .. $];
+                auto split = command.split(' ');
+                command = split[0];
+                auto args = split[1 .. $];
+
                 message_buffer = "Command: '" ~ command ~ "'";
                 switch(command)
                 {
@@ -208,6 +301,47 @@ void term_ui(string[] args)
                     break;
                     case "crosshair" :
                         crosshair_shown = !crosshair_shown;
+                    break;
+                    case "add" :
+                    {
+                        if (args.length == 1)
+                        {
+                            auto word = args[0]; 
+                            message_buffer = "Adding word: '" ~ word ~ "'";
+                            trie.addWord(word);
+                        }
+                        else
+                        {
+                            message_buffer = "Invalid args for addWord command";
+                        }
+                    }
+                    break;
+                    case "print" :
+                    {
+                        message_buffer = trie.printTrie();
+                    }
+                    break;
+                    case "findPrefix" :
+                    {
+                        if (args.length == 1)
+                        {
+                            auto word = args[0]; 
+                            message_buffer = " findPrefix: '" ~ word ~ "'";
+                            auto prefix_node = trie.findPrefix(word);
+                            if (prefix_node)
+                            {
+                                message_buffer = trie.matchingPrefix(prefix_node).join(", ");
+                            }
+                            else
+                            {
+                                message_buffer = "Prefix '" ~ word ~ "' not found";
+                            }
+                        }
+                        else
+                        {
+                            message_buffer = "Invalid args for findPrefix command";
+                        }
+                    }
                     break;
                     case "q" :
                         exit = true;
@@ -252,7 +386,7 @@ void term_ui(string[] args)
             }
             goto Lsleep;
         }
-
+/+
         if (command_mode && e.type != 3 && e.key == Key.arrowUp)
         {
             auto history_result = history(command_buffer[1 .. $], history_list);
@@ -261,7 +395,7 @@ void term_ui(string[] args)
                 command_buffer = ":" ~ history_result;
             }
         }
-
++/
         if (!command_mode && e.type != 3 && e.ch == ':')
         {
             command_mode = true;
