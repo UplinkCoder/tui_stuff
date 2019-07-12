@@ -15,7 +15,7 @@ struct Cell {
     ushort bg;
 };
 
-enum EventType {
+enum EventType : ubyte {
     key    = 1,
     resize = 2,
     mouse  = 3
@@ -29,7 +29,7 @@ enum EventType {
  * one of them can be non-zero at a time.
  */
 struct Event {
-    ubyte type;
+    EventType type;
     ubyte mod; /** modifiers to either 'key' or 'ch' below */
     ushort key; /** one of the TB_KEY_* constants */
     uint ch; /** unicode character */

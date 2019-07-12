@@ -6,6 +6,7 @@ import std.algorithm;
 import std.range;
 import std.datetime;
 import core.thread;
+import util;
 
 struct TrieNode
 {
@@ -352,7 +353,7 @@ void term_ui(string[] args)
         }
     }
 
-    static immutable defaultEvent = Event(1);
+    static immutable defaultEvent = Event(EventType.key);
 
 
     do with(termbox)
@@ -474,7 +475,7 @@ void term_ui(string[] args)
             }
             if (y == 3)
             {
-                word_buffer = "  " ~ to!string(lastEvent) ~ "  ";
+                word_buffer = "  " ~ structToString(lastEvent) ~ "  ";
                 //word_buffer = "The password is shellfish";
                 xlength = cast(int) word_buffer.length;
                 xpos = cast(int)((width / 2) - (word_buffer.length / 2));
