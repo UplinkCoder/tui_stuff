@@ -1,13 +1,21 @@
 module util;
 
+struct NoPrint {}
+
 string structToString(T)(T _struct)
 {
     char[] result;
 
     result ~= T.stringof ~ " (";
 
-    foreach(i, e;_struct.tupleof)
+    Louter: foreach(i, e;_struct.tupleof)
     {
+        foreach(attrib;__traits(getAttributes, _struct.tupleof[i]))
+        {
+            static if (is(attrib == NoPrint))
+            continue Louter;
+        }
+
         alias type = typeof(_struct.tupleof[i]);
         const fieldName = _struct.tupleof[i].stringof["_struct.".length .. $];
 
@@ -16,6 +24,10 @@ string structToString(T)(T _struct)
         static if (is(type == enum))
         {
             result ~= enumToString(e);
+        }
+        else static if (is(type : ulong))
+        {
+            result ~= itos64(e);
         }
         else
         {

@@ -8,6 +8,100 @@ import std.datetime;
 import core.thread;
 import util;
 
+version (ArenaAllocate)
+{
+struct ArenaChunk
+{
+    void* memory;
+
+    ArenaChunk* next;
+
+    uint free;
+    uint used;
+
+    uint chunkIndex;
+    uint allocCount;
+
+    Arena* arena;
+}
+
+struct Arena
+{
+    string name;
+
+    @NoPrint ArenaChunk[8] chunkCache;
+    ArenaChunk[] chunks;
+
+    int freeInLastChunk;
+    uint used;
+    uint chunkSize = ushort.max * 2;
+
+    void* allocate(int size, string filename = "", int line = 0)
+    {
+        ArenaChunk* chunk = null;
+        size = (size + 16) & ~16;
+        void* returnPointer = null;
+        int neededChunks = (size + chunkSize) / chunkSize;
+
+        if (freeInLastChunk >= size)
+        {
+            chunk = &chunks[$-1];
+            returnPointer = chunks[$-1].memory + chunk.used;
+        LchunkHasSpace:
+            int uses = 
+                size - ((neededChunks - 1) * chunkSize);
+
+            assert(uses <= chunkSize);
+
+            chunk = chunk ? chunk : &chunks[$-1];
+            if (chunk.used == 0 && chunk.free == 0)
+            {
+                chunk.free = chunkSize;
+            }
+            chunk.free -= uses;
+            chunk.used += uses;
+            chunk.allocCount++;
+            freeInLastChunk = chunk.free;
+        }
+        else // in this case we need to allocate new chunks
+        {
+            auto chunkIndex = chunks.length;
+            if (chunks.length + neededChunks <= chunkCache.length)
+            {
+                chunks = chunkCache[0 .. chunks.length + neededChunks];
+            }
+            else
+            {
+                // we've run out of chunkCache
+                // let's go the slow-poke-druntime path for now
+                chunks.length += neededChunks;
+            }
+            import core.stdc.stdlib : calloc;
+            auto chunkMem = calloc(chunkSize, neededChunks);
+            returnPointer = chunkMem;
+
+            foreach(nc;0 .. neededChunks)
+            {
+                chunks[chunkIndex + nc].memory = chunkMem;
+                chunkMem += chunkSize;
+            }
+
+            goto LchunkHasSpace;
+        }
+
+        this.used += size;
+
+        assert(returnPointer, "Allocate is fucked");
+        
+        return returnPointer;
+    }
+
+    string arenaStats()
+    {
+        return structToString(this);
+    }
+}
+}
 struct TrieNode
 {
     string data;
@@ -15,15 +109,21 @@ struct TrieNode
     bool leaf;
 }
 
+alias AllocFn = void* function(int, string = "", int = 0);
+
 struct Trie
 {
     TrieNode root;
+    version (ArenaAllocate)
+    {
+        Arena* arena;
+    }
 
     string[] matchingPrefix(TrieNode *prefix_node)
     {
         string[] result; 
 
-        if (prefix_node)
+        if (prefix_node !is null)
         {
             auto node = *prefix_node;
             if (node.data)
@@ -59,9 +159,12 @@ struct Trie
         return test;
     }
 
-    void addWord(string word)
+    auto addWord(string word)
     {
+        StopWatch sw;
+        sw.start();
         TrieNode* n = &root;
+        TrieNode* new_node = null;
         import std.ascii : toLower;
         alias lowerASCII = std.ascii.toLower;
         char c;
@@ -75,12 +178,22 @@ struct Trie
             }
             else
             {
-                auto new_node = new TrieNode();
+                version(ArenaAllocate)
+                {
+                    new_node = cast(TrieNode*) arena.allocate(TrieNode.sizeof);
+                    *new_node = (*new_node).init;
+                }
+                else
+                {
+                    new_node = new TrieNode;
+                }
                 n.children[c] = new_node;
                 n = new_node;
             }
         }
         n.data = word;
+        sw.stop();
+        return sw.peek();
     }
 
     void remove(TrieNode* node)
@@ -90,7 +203,7 @@ struct Trie
 
     string printTrie()
     {
-        return matchingPrefix(&root).join("  "); 
+        return matchingPrefix(&root).join(", "); 
     }
 }
 
@@ -195,6 +308,11 @@ void main(string[] args)
 
 void term_ui(string[] args)
 {
+    version (ArenaAllocate)
+    {
+        Arena trieArena = Arena("TrieArena");
+    }
+
     auto ctx = initUI();
 
     auto width = ctx.screen_dim.x;
@@ -202,7 +320,7 @@ void term_ui(string[] args)
 
     bool paused = false;
     bool command_mode = false;
-    bool crosshair_shown = true;
+    bool crosshair_shown = false;
 
     Event e;
     Event lastEvent;
@@ -219,7 +337,17 @@ void term_ui(string[] args)
     string command_buffer;
 
     string command;
-    Trie trie;
+
+    version (ArenaAllocate)
+    {
+        Trie* trie  = cast(Trie*) trieArena.allocate(Trie.sizeof);
+        *trie = (*trie).init;
+        trie.arena = &trieArena;
+    }
+    else
+    {
+        Trie trie;
+    }
     bool exit = false;
 
     static string history(string buffer, string[] history_list)
@@ -242,6 +370,7 @@ void term_ui(string[] args)
         "print",
         "q",
         "p",
+        "arenaStats",
         "center",
         "crosshair"
     ];
@@ -303,13 +432,20 @@ void term_ui(string[] args)
                     case "crosshair" :
                         crosshair_shown = !crosshair_shown;
                     break;
+                    version (ArenaAllocate)
+                    {
+                        case "arenaStats" :
+                            message_buffer = trieArena.arenaStats();
+                        break;
+                    }
                     case "add" :
                     {
                         if (args.length == 1)
                         {
                             auto word = args[0]; 
                             message_buffer = "Adding word: '" ~ word ~ "'";
-                            trie.addWord(word);
+                            auto time_taken = trie.addWord(word);
+                            message_buffer = structToString(time_taken);
                         }
                         else
                         {
@@ -387,6 +523,12 @@ void term_ui(string[] args)
             }
             goto Lsleep;
         }
+
+        if (e.type == 2) // resize event
+        {
+            width = e.w;
+            height = e.h;
+        }
 /+
         if (command_mode && e.type != 3 && e.key == Key.arrowUp)
         {
@@ -438,13 +580,13 @@ void term_ui(string[] args)
         }
 
         {
-            if (e.ch != 0)
+            if (e.ch == 0)
                 word_buffer = "  " ~ "Nyautica matrix dataset analyser" ~ "  ";
             
-            if (e.type != 3 && e.ch)
+            if (e.type != EventType.mouse && e.ch)
                 (command_mode ? command_buffer : input_buffer) ~= e.ch;
 
-            if (e.type != 3 && e.key == keyboard.Key.enter)
+            if (e.type != EventType.mouse && e.key == keyboard.Key.enter)
             {
                 if (command_mode)
                 {
@@ -492,7 +634,15 @@ void term_ui(string[] args)
                 xlength = cast(int) word_buffer.length;
                 xpos = cast(int)((width / 2) - (word_buffer.length / 2));
             }
-            else if (y == height -1)
+            else if (y == height - 2)
+            {
+                import core.memory;
+                auto gc_stats = GC.stats();
+                word_buffer = structToString(gc_stats);
+                xlength = cast(int) word_buffer.length;
+                xpos = cast(int)((width / 2) - (word_buffer.length / 2));
+            }
+            else if (y == height - 1)
             {
                 if (command_buffer.length > 0)
                 {
@@ -505,7 +655,7 @@ void term_ui(string[] args)
             {
                 wchar ch = ' ';
 
-                if ((x >= xpos && x < xpos + xlength) && (y == 2 || y == 3 || y == 4 || y == 5 || (y == height-1 && command_buffer.length > 0)))
+                if ((x >= xpos && x < xpos + xlength) && (y == 2 || y == 3 || y == 4 || y == 5 || y == height-2 ||(y == height-1 && command_buffer.length > 0)))
                 {
                     const buffer = (y == 2 ? input_buffer : word_buffer);  
                     ch = buffer[x - xpos];
@@ -523,6 +673,9 @@ void term_ui(string[] args)
             }
         }
     Lsleep:
+        import core.memory;
+        GC.collect();
+        GC.minimize();
         Thread.sleep(dur!"msecs"(20));
         tb_present();
 
