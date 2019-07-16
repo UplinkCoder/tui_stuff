@@ -2,39 +2,45 @@ module util;
 
 struct NoPrint {}
 
-string structToString(T)(T _struct)
+string structToString(T)(auto ref T _struct)
 {
     char[] result;
 
     result ~= T.stringof ~ " (";
 
-    Louter: foreach(i, e;_struct.tupleof)
+    foreach(i, e;_struct.tupleof)
     {
+        bool skip = false;
+
         foreach(attrib;__traits(getAttributes, _struct.tupleof[i]))
         {
             static if (is(attrib == NoPrint))
-            continue Louter;
+            skip = true;
         }
 
-        alias type = typeof(_struct.tupleof[i]);
-        const fieldName = _struct.tupleof[i].stringof["_struct.".length .. $];
+        if (!skip)
+        {
+            alias type = typeof(_struct.tupleof[i]);
+            const fieldName = _struct.tupleof[i].stringof["_struct.".length .. $];
 
-        result ~= "" ~ fieldName ~ " : ";
+            result ~= "" ~ fieldName ~ " : ";
 
-        static if (is(type == enum))
-        {
-            result ~= enumToString(e);
+            static if (is(type == enum))
+            {
+                result ~= enumToString(e);
+            }
+            else static if (is(type : ulong))
+            {
+                result ~= itos64(e);
+            }
+            else
+            {
+                pragma(msg, type);
+                import std.conv : to;
+                result ~= to!string(e);
+            }
+            result ~= ", ";
         }
-        else static if (is(type : ulong))
-        {
-            result ~= itos64(e);
-        }
-        else
-        {
-            import std.conv : to;
-            result ~= to!string(e);
-        }
-        result ~= ", ";
     }
 
     result = result[0 .. $-1];
@@ -122,7 +128,7 @@ string enumToString(E)(E v)
     return result;
 }
 
-string hexString (ulong value)
+enum hexString = (ulong value)
 {
     const wasZero = !value;
     static immutable NibbleRep = "0123456789abcdef";

@@ -32,6 +32,7 @@ struct Arena
     @NoPrint ArenaChunk[8] chunkCache;
     ArenaChunk[] chunks;
 
+    int n_chunks;
     int freeInLastChunk;
     uint used;
     uint chunkSize = ushort.max * 2;
@@ -39,7 +40,7 @@ struct Arena
     void* allocate(int size, string filename = "", int line = 0)
     {
         ArenaChunk* chunk = null;
-        size = (size + 16) & ~16;
+        size = (size + 15) & ~16;
         void* returnPointer = null;
         int neededChunks = (size + chunkSize) / chunkSize;
 
@@ -65,6 +66,7 @@ struct Arena
         }
         else // in this case we need to allocate new chunks
         {
+            n_chunks += neededChunks;
             auto chunkIndex = chunks.length;
             if (chunks.length + neededChunks <= chunkCache.length)
             {
@@ -106,7 +108,6 @@ struct TrieNode
 {
     string data;
     TrieNode*[26 + 10] children;
-    bool leaf;
 }
 
 alias AllocFn = void* function(int, string = "", int = 0);
@@ -217,6 +218,7 @@ static immutable figure =
 // import derelict.imgui.imgui;
 
 import std.file : dirEntries;
+import core.time;
 
 struct SizeBox
 {
@@ -321,6 +323,7 @@ void term_ui(string[] args)
     bool paused = false;
     bool command_mode = false;
     bool crosshair_shown = false;
+    bool minimize = false;
 
     Event e;
     Event lastEvent;
@@ -337,6 +340,8 @@ void term_ui(string[] args)
     string command_buffer;
 
     string command;
+
+//    registerCommand(command_list, &trie.addWord);
 
     version (ArenaAllocate)
     {
@@ -366,6 +371,7 @@ void term_ui(string[] args)
     static immutable string[] command_list =
     [
         "add",
+        "minimize",
         "findPrefix",
         "print",
         "q",
@@ -458,6 +464,11 @@ void term_ui(string[] args)
                         message_buffer = trie.printTrie();
                     }
                     break;
+                    case "minimize" : 
+                    {
+                        minimize = !minimize;
+                    }
+                    break;
                     case "findPrefix" :
                     {
                         if (args.length == 1)
@@ -494,7 +505,11 @@ void term_ui(string[] args)
 
     do with(termbox)
     {
-
+        static float frame_time;
+        import std.datetime;
+        static StopWatch sw;
+        sw.reset();
+        sw.start();
 //        centered_text("nyautica dataset viewer", width);
 
         Cell cell;
@@ -610,12 +625,20 @@ void term_ui(string[] args)
 
         foreach(int y;0 .. height)
         {
-            if (y == 2)
+            if (y == 0)
+            {
+                import std.format : sformat;
+                char[64] format_buffer;
+                word_buffer = cast(string)sformat(format_buffer, "frame_time: %2.2f ms", frame_time);
+                xlength = cast(int)word_buffer.length;
+                xpos = 0;
+            }
+            else if (y == 2)
             {
                 xlength = cast(int) input_buffer.length;
                 xpos = cast(int)((width / 2) - (xlength / 2));
             }
-            if (y == 3)
+            else if (y == 3)
             {
                 word_buffer = "  " ~ structToString(lastEvent) ~ "  ";
                 //word_buffer = "The password is shellfish";
@@ -655,7 +678,7 @@ void term_ui(string[] args)
             {
                 wchar ch = ' ';
 
-                if ((x >= xpos && x < xpos + xlength) && (y == 2 || y == 3 || y == 4 || y == 5 || y == height-2 ||(y == height-1 && command_buffer.length > 0)))
+                if ((x >= xpos && x < xpos + xlength) && (y == 0 || y == 2 || y == 3 || y == 4 || y == 5 || y == height-2 ||(y == height-1 && command_buffer.length > 0)))
                 {
                     const buffer = (y == 2 ? input_buffer : word_buffer);  
                     ch = buffer[x - xpos];
@@ -674,10 +697,16 @@ void term_ui(string[] args)
         }
     Lsleep:
         import core.memory;
-        GC.collect();
-        GC.minimize();
+        if (minimize)
+        {
+            GC.collect();
+            GC.minimize();
+        }
+        import core.time : to;
+        sw.stop();
+        frame_time = sw.peek().to!("msecs", float);
         Thread.sleep(dur!"msecs"(20));
-        tb_present();
+        //tb_present();
 
 
     } while (!exit);
