@@ -338,6 +338,7 @@ void term_ui(string[] args)
     string word_buffer;
     string input_buffer;
     string command_buffer;
+    bool gc_enabled = true;
 
     string command;
 
@@ -372,6 +373,7 @@ void term_ui(string[] args)
     [
         "add",
         "minimize",
+        "gc_toggle",
         "findPrefix",
         "print",
         "q",
@@ -464,6 +466,21 @@ void term_ui(string[] args)
                         message_buffer = trie.printTrie();
                     }
                     break;
+                    case "gc_toggle" :
+                    {
+                        import core.memory;
+                        if (gc_enabled)
+                        {
+                            GC.disable();
+                            gc_enabled = false;
+                        }
+                        else
+                        {
+                            GC.enable();
+                            gc_enabled = true;                        
+                        }
+
+                    }
                     case "minimize" : 
                     {
                         minimize = !minimize;
@@ -506,6 +523,7 @@ void term_ui(string[] args)
     do with(termbox)
     {
         static float frame_time;
+        static float gc_time;
         import std.datetime;
         static StopWatch sw;
         sw.reset();
@@ -629,7 +647,12 @@ void term_ui(string[] args)
             {
                 import std.format : sformat;
                 char[64] format_buffer;
-                word_buffer = cast(string)sformat(format_buffer, "frame_time: %2.2f ms", frame_time);
+                static float max_frame_time = 0.0f;
+                if (frame_time > max_frame_time)
+                    max_frame_time = frame_time;
+
+                word_buffer = cast(string)sformat(format_buffer, "frame_time: %2.2f ms  max %2.2f ms gc_time %2.2f", frame_time, max_frame_time, 
+                    gc_time);
                 xlength = cast(int)word_buffer.length;
                 xpos = 0;
             }
@@ -699,14 +722,19 @@ void term_ui(string[] args)
         import core.memory;
         if (minimize)
         {
+            static StopWatch gc_watch;
+            gc_watch.start();
             GC.collect();
             GC.minimize();
+            gc_watch.stop();
+            gc_watch.reset();
         }
         import core.time : to;
         sw.stop();
         frame_time = sw.peek().to!("msecs", float);
+        gc_time = sw.peek().to!("msecs", float);
         Thread.sleep(dur!"msecs"(20));
-        //tb_present();
+        tb_present();
 
 
     } while (!exit);
