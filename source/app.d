@@ -8,6 +8,8 @@ import std.datetime;
 import core.thread;
 import util;
 
+import TracyC;
+
 version (ArenaAllocate)
 {
 struct ArenaChunk
@@ -122,6 +124,9 @@ struct Trie
 
     string[] matchingPrefix(TrieNode *prefix_node)
     {
+        pragma(msg, __FILE__);
+        mixin(zoneMixin("matchingPrefix"));
+
         string[] result; 
 
         if (prefix_node !is null)
@@ -304,6 +309,7 @@ enum Button
 
 void main(string[] args)
 {
+    //mixin(zoneMixin("main"));
     term_ui(args);
 }
 
@@ -385,6 +391,7 @@ void term_ui(string[] args)
 
     static string tab_complete(string buffer, const string[] word_list)
     {
+        pragma(msg, zoneMixin("tab_complete"));
         string result = null;
 
         if (!buffer.length)
@@ -410,6 +417,8 @@ void term_ui(string[] args)
 
     void handle_command()
     {
+        mixin(zoneMixin("handleCommand"));
+        TracyMessage("entered handle command");
         command_mode = false;
         command = command_buffer;
         command_buffer.length = 0;
@@ -452,6 +461,7 @@ void term_ui(string[] args)
                         {
                             auto word = args[0]; 
                             message_buffer = "Adding word: '" ~ word ~ "'";
+                            TracyMessage(message_buffer);
                             auto time_taken = trie.addWord(word);
                             message_buffer = structToString(time_taken);
                         }
@@ -481,6 +491,7 @@ void term_ui(string[] args)
                         }
 
                     }
+                    break;
                     case "minimize" : 
                     {
                         minimize = !minimize;
@@ -522,6 +533,11 @@ void term_ui(string[] args)
 
     do with(termbox)
     {
+        static immutable marker_name =
+            "TermBoxFrame";
+        mixin(zoneMixin(marker_name));
+        ___tracy_emit_frame_mark_start(marker_name.ptr);
+        scope(exit) ___tracy_emit_frame_mark_end(marker_name.ptr);
         static float frame_time;
         static float gc_time;
         import std.datetime;
@@ -535,9 +551,10 @@ void term_ui(string[] args)
 
         int xpos = -1;
         int xlength = -1;
-
-        tb_peek_event(&e, 10);
-
+        {
+            zoneMixin("tb_peek_event");
+            tb_peek_event(&e, 10);
+        }
 
         /// don't show the default event
 
@@ -640,6 +657,8 @@ void term_ui(string[] args)
                 if (command_mode ? buffer.length > 1 : buffer.length) buffer.length--;
             }
         }
+        {
+            mixin(zoneMixin("write_buffer"));
 
         foreach(int y;0 .. height)
         {
@@ -717,25 +736,31 @@ void term_ui(string[] args)
                 cell.ch = ch;
                 tb_put_cell(x, y, &cell);
             }
-        }
+        }}
     Lsleep:
         import core.memory;
+        import core.time : to;
         if (minimize)
         {
+            mixin(zoneMixin("gc"));
             static StopWatch gc_watch;
             gc_watch.start();
             GC.collect();
             GC.minimize();
             gc_watch.stop();
+            gc_time = gc_watch.peek().to!("msecs", float);
             gc_watch.reset();
         }
-        import core.time : to;
         sw.stop();
         frame_time = sw.peek().to!("msecs", float);
-        gc_time = sw.peek().to!("msecs", float);
+        {
+            zoneMixin("sleep");
         Thread.sleep(dur!"msecs"(20));
-        tb_present();
-
+        }
+        {
+            mixin(zoneMixin("present"));
+            tb_present();
+        }
 
     } while (!exit);
 

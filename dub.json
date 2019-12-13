@@ -4,7 +4,8 @@
 		"Stefan Koch"
 	],
 	"description": "tui_stuff",
-    "sourceFiles" : [ "libtermbox.a" ] ,
+    "sourceFiles" : [ "libtermbox.a", "TracyClient.o" ],
+    "libs" : [ "stdc++" ],
 	"copyright": "Copyright © 2019, Stefan Koch",
 	"license": "proprietary"
 }
