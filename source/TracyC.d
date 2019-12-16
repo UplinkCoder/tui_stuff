@@ -12,19 +12,23 @@ string zoneMixin(string name, string file = __FILE__, string function_ = __FUNCT
 {
     static string itos_(const uint val) pure @trusted nothrow
     {
-        static const(uint) fastLog10(const uint val) pure nothrow @nogc @safe
-        {
-            return (val < 10) ? 0 : (val < 100) ? 1 : (val < 1000) ? 2 : (val < 10000) ? 3
-                : (val < 100000) ? 4 : (val < 1000000) ? 5 : (val < 10000000) ? 6
-                    : (val < 100000000) ? 7 : (val < 1000000000) ? 8 : 9;
-        }
-        
         /*@unique*/
         static immutable fastPow10tbl = [
             1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000,
         ];
         
-        immutable length = fastLog10(val) + 1;
+        immutable length = 
+                    (val < 10) ?
+                1 : (val < 100) ?
+                2 : (val < 1000) ?
+                3 : (val < 10000) ?
+                4 : (val < 100000) ?
+                5 : (val < 1000000) ?
+                6 : (val < 10000000) ?
+                7 : (val < 100000000) ?
+                8 : (val < 1000000000) ?
+                9 : 10;
+
         char[] result;
         result.length = length;
         
@@ -51,15 +55,6 @@ string zoneMixin(string name, string file = __FILE__, string function_ = __FUNCT
 
 
 extern (C):
-
-alias TracyConcat = TracyConcatIndirect;
-
-extern (D) string TracyConcatIndirect(T0, T1)(auto ref T0 x, auto ref T1 y)
-{
-    import std.conv : to;
-
-    return to!string(x) ~ to!string(y);
-}
 
 struct ___tracy_source_location_data
 {
